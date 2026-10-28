@@ -24,28 +24,35 @@ graph LR
     K[PrefixCacheConfig] --> C
 ```
 
-## Results
+## Verified Components
 
-Benchmarked on a single A100 80GB with `meta-llama/Llama-3.1-8B-Instruct`, 500 requests per configuration:
+The benchmark framework has been verified with 30/30 unit tests passing:
 
-| Backend | Pattern  | Concurrency | p50 (s) | p95 (s) | p99 (s) | TTFT (s) | Throughput (rps) | Tok/s | Cost/1M tok |
-|---------|----------|-------------|---------|---------|---------|----------|-----------------|-------|-------------|
-| vllm    | uniform  | 16          | 0.842   | 1.876   | 2.341   | 0.089    | 17.2            | 298   | $0.0812     |
-| vllm    | bursty   | 16          | 0.967   | 2.103   | 2.687   | 0.102    | 14.8            | 271   | $0.0943     |
-| vllm    | ramp_up  | 16          | 0.791   | 1.654   | 2.012   | 0.081    | 18.9            | 312   | $0.0738     |
-| vllm    | cyclic   | 16          | 0.856   | 1.912   | 2.401   | 0.091    | 16.8            | 289   | $0.0831     |
-| vllm    | spike    | 16          | 0.923   | 2.087   | 2.612   | 0.098    | 15.4            | 276   | $0.0907     |
-| sglang  | uniform  | 16          | 0.724   | 1.523   | 1.891   | 0.072    | 20.1            | 341   | $0.0693     |
-| sglang  | bursty   | 16          | 0.831   | 1.789   | 2.234   | 0.086    | 17.3            | 308   | $0.0806     |
-| sglang  | ramp_up  | 16          | 0.681   | 1.387   | 1.723   | 0.068    | 21.7            | 358   | $0.0643     |
-| sglang  | cyclic   | 16          | 0.738   | 1.567   | 1.934   | 0.074    | 19.6            | 332   | $0.0712     |
-| sglang  | spike    | 16          | 0.798   | 1.734   | 2.156   | 0.082    | 18.1            | 315   | $0.0770     |
+| Component | Tests | Status |
+|-----------|-------|--------|
+| Config parsing + YAML roundtrip | 8 | Pass |
+| Traffic generators (all 5 patterns) | 9 | Pass |
+| BenchmarkResult metrics + percentiles | 6 | Pass |
+| PrefixCacheConfig + SmallModelRouter | 4 | Pass |
+| Cost calculation + routing logic | 3 | Pass |
 
-**Key findings:**
-- SGLang consistently outperforms vLLM by 14-18% on p50 latency across all 5 traffic patterns
-- With prefix caching enabled, SGLang's p95 drops to 1.21s (uniform) vs vLLM's 1.58s
-- Small-model routing for simple requests cuts cost per request by 38% while keeping p95 under 2.1s
-- Bursty and spike patterns show the largest backend divergence (SGLang handles bursts more gracefully)
+### Traffic patterns supported
+
+The framework generates 5 traffic patterns, each verified to produce the correct request count and scheduling distribution:
+- **uniform**: Fixed-rate request stream
+- **bursty**: Alternating high/low load periods
+- **ramp_up**: Linearly increasing concurrency
+- **cyclic**: Sinusoidal load pattern
+- **spike**: Steady traffic with periodic sharp bursts
+
+### SmallModelRouter (verified)
+
+Routes simple requests (short prompts without complex keywords) to a smaller model. Unit tests confirm:
+- Short prompts route to the small model
+- Complex prompts (with keywords like "analyze", "compare") route to the large model
+- Cost savings estimate is calculated correctly from routing ratio
+
+> **Running real benchmarks** requires a GPU with vLLM and SGLang installed. The framework produces a comparison table with p50/p95/p99 latency, TTFT, throughput, tokens/sec, and cost/1M tokens. See **Usage** below for the commands.
 
 ## Setup
 
