@@ -1,0 +1,23 @@
+backend:
+  backend_type: vllm
+  model: meta-llama/Llama-3.1-8B-Instruct
+  host: "0.0.0.0"
+  port: 8000
+  tensor_parallel_size: 1
+  gpu_memory_utilization: 0.9
+  max_model_len: 4096
+  enable_prefix_caching: false
+
+traffic:
+  pattern: uniform
+  num_requests: 500
+  concurrency: 16
+  max_tokens: 256
+  prompt_lengths: [128, 256, 512, 1024]
+
+cost:
+  cost_per_gpu_hour: 2.50
+
+warmup_requests: 10
+output_dir: results
+run_name: ""
