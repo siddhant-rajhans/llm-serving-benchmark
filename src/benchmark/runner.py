@@ -33,6 +33,7 @@ class BenchmarkResult:
     pattern: str
     num_requests: int
     concurrency: int
+    wall_clock_seconds: float = 0.0
     results: list[RequestResult] = field(default_factory=list)
 
     @property
@@ -71,10 +72,9 @@ class BenchmarkResult:
 
     @property
     def throughput_rps(self) -> float:
-        if not self.successful:
+        if not self.successful or self.wall_clock_seconds <= 0:
             return 0.0
-        total_time = max(r.latency for r in self.successful)
-        return len(self.successful) / total_time if total_time > 0 else 0.0
+        return len(self.successful) / self.wall_clock_seconds
 
     @property
     def tokens_per_second(self) -> float:
@@ -130,7 +130,8 @@ class BenchmarkRunner:
             "stream": True,
         }
 
-        assert self._client is not None
+        if self._client is None:
+            raise RuntimeError("HTTP client not initialized; call run() instead of _send_request()")
         first_token_time: float | None = None
         tokens_generated = 0
         start = time.monotonic()
@@ -151,6 +152,8 @@ class BenchmarkRunner:
             ttft = (first_token_time - start) if first_token_time else elapsed
             tps = tokens_generated / elapsed if elapsed > 0 else 0.0
 
+            # Word count approximates token count for offline benchmarking;
+            # production use should tokenize with the model's tokenizer.
             return RequestResult(
                 latency=elapsed,
                 time_to_first_token=ttft,
@@ -179,14 +182,15 @@ class BenchmarkRunner:
                 "messages": [{"role": "user", "content": "Hello, world!"}],
                 "max_tokens": 16,
             }
-            assert self._client is not None
+            if self._client is None:
+                raise RuntimeError("HTTP client not initialized")
             try:
                 resp = await self._client.post(endpoint, json=payload, timeout=60.0)
                 resp.raise_for_status()
             except Exception:
                 pass
 
-    async def _run_traffic(self, endpoint: str) -> list[RequestResult]:
+    async def _run_traffic(self, endpoint: str) -> tuple[list[RequestResult], float]:
         traffic = list(get_traffic_generator(self.config.traffic))
         logger.info(
             "Running %d requests with pattern=%s concurrency=%d",
@@ -203,14 +207,16 @@ class BenchmarkRunner:
             async with semaphore:
                 return await self._send_request(req, endpoint)
 
+        wall_start = time.monotonic()
         tasks = [asyncio.create_task(_bounded_request(r)) for r in traffic]
         for i, coro in enumerate(asyncio.as_completed(tasks)):
             result = await coro
             results.append(result)
             if (i + 1) % 50 == 0:
                 logger.info("Completed %d/%d requests", i + 1, len(traffic))
+        wall_clock = time.monotonic() - wall_start
 
-        return results
+        return results, wall_clock
 
     async def run(self) -> BenchmarkResult:
         backend = self._create_backend()
@@ -227,7 +233,7 @@ class BenchmarkRunner:
             with backend:
                 endpoint = backend.get_endpoint()
                 await self._warmup(endpoint)
-                result.results = await self._run_traffic(endpoint)
+                result.results, result.wall_clock_seconds = await self._run_traffic(endpoint)
         finally:
             await self._client.aclose()
             self._client = None
@@ -235,8 +241,8 @@ class BenchmarkRunner:
         succeeded = len(result.successful)
         failed = len(result.results) - succeeded
         logger.info(
-            "Benchmark complete: %d succeeded, %d failed, p95=%.3fs",
-            succeeded, failed, result.p95_latency,
+            "Benchmark complete: %d succeeded, %d failed, p95=%.3fs, throughput=%.1f rps",
+            succeeded, failed, result.p95_latency, result.throughput_rps,
         )
         return result
 

@@ -14,6 +14,11 @@ traffic:
   concurrency: 16
   max_tokens: 256
   prompt_lengths: [128, 256, 512, 1024]
+  ramp_up_seconds: 30.0
+  burst_size: 50
+  burst_interval_seconds: 5.0
+  cycle_period_seconds: 60.0
+  spike_multiplier: 5.0
 
 cost:
   cost_per_gpu_hour: 2.50

@@ -9,7 +9,7 @@ from rich.table import Table
 
 from benchmark.config import BenchmarkConfig, BackendConfig, BackendType, TrafficPattern
 from benchmark.runner import BenchmarkRunner, BenchmarkResult
-from benchmark.report import generate_report, generate_markdown_table
+from benchmark.report import generate_report
 from benchmark.optimizations import SmallModelRouter
 
 console = Console()
@@ -108,22 +108,6 @@ def compare(
 
     report_path = generate_report(all_results, out)
     console.print(f"\n[green]Report saved to {report_path}[/green]")
-
-
-@cli.command()
-@click.argument("results_dir", type=click.Path(exists=True))
-def report(results_dir: str) -> None:
-    """Regenerate report from saved results."""
-    import json
-    results_path = Path(results_dir) / "results.json"
-    if not results_path.exists():
-        console.print("[red]No results.json found in the given directory.[/red]")
-        raise SystemExit(1)
-
-    raw = json.loads(results_path.read_text())
-    console.print(f"Loaded {len(raw)} result entries.")
-    for entry in raw:
-        console.print(f"  {entry['backend']} / {entry['pattern']}: p95={entry['p95_latency_s']}")
 
 
 @cli.command()

@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from benchmark.config import TrafficConfig
 
 
-SAMPLE_PROMPTS = [
+_SAMPLE_PROMPTS = [
     "Explain the concept of {topic} in simple terms.",
     "Write a short summary of the following text: {text}",
     "What are the key differences between {a} and {b}?",
@@ -19,7 +19,7 @@ SAMPLE_PROMPTS = [
     "Translate the following to French: {text}",
 ]
 
-TOPICS = [
+_TOPICS = [
     "quantum computing", "machine learning", "blockchain",
     "photosynthesis", "general relativity", "neural networks",
     "distributed systems", "compiler design", "operating systems",
@@ -34,19 +34,26 @@ class Request:
 
 
 def _make_prompt(target_length: int) -> str:
-    base = random.choice(SAMPLE_PROMPTS).format(
-        topic=random.choice(TOPICS),
+    """Build a synthetic prompt of approximately ``target_length`` words.
+
+    Uses repeated filler text to reach the target size.  These are load-test
+    payloads, not representative of real user prompts; tokenizer behavior on
+    repeated tokens may differ from natural language.
+    """
+    base = random.choice(_SAMPLE_PROMPTS).format(
+        topic=random.choice(_TOPICS),
         text="Lorem ipsum " * (target_length // 15),
-        a=random.choice(TOPICS),
-        b=random.choice(TOPICS),
+        a=random.choice(_TOPICS),
+        b=random.choice(_TOPICS),
         task="calculates the Fibonacci sequence",
     )
     while len(base.split()) < target_length // 4:
-        base += f" Additionally, consider the implications of {random.choice(TOPICS)}."
+        base += f" Additionally, consider the implications of {random.choice(_TOPICS)}."
     return base
 
 
 def uniform(config: TrafficConfig) -> Iterator[Request]:
+    """Fixed-rate request stream at ``1/concurrency`` second intervals."""
     interval = 1.0 / config.concurrency
     start = time.monotonic()
     for i in range(config.num_requests):
@@ -59,6 +66,7 @@ def uniform(config: TrafficConfig) -> Iterator[Request]:
 
 
 def bursty(config: TrafficConfig) -> Iterator[Request]:
+    """Alternating bursts of ``burst_size`` requests separated by quiet gaps."""
     start = time.monotonic()
     sent = 0
     burst_idx = 0
@@ -77,6 +85,7 @@ def bursty(config: TrafficConfig) -> Iterator[Request]:
 
 
 def ramp_up(config: TrafficConfig) -> Iterator[Request]:
+    """Linearly increasing request rate from 1 to ``concurrency`` RPS."""
     start = time.monotonic()
     total_time = config.ramp_up_seconds
     for i in range(config.num_requests):
@@ -92,6 +101,7 @@ def ramp_up(config: TrafficConfig) -> Iterator[Request]:
 
 
 def cyclic(config: TrafficConfig) -> Iterator[Request]:
+    """Sinusoidal load oscillating around half the target concurrency."""
     start = time.monotonic()
     period = config.cycle_period_seconds
     base_rate = config.concurrency / 2
@@ -109,6 +119,7 @@ def cyclic(config: TrafficConfig) -> Iterator[Request]:
 
 
 def spike(config: TrafficConfig) -> Iterator[Request]:
+    """Steady traffic with a sudden ``spike_multiplier``x burst at the 33% mark."""
     start = time.monotonic()
     base_interval = 1.0 / config.concurrency
     spike_start = config.num_requests // 3

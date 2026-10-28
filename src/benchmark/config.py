@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+logger = logging.getLogger(__name__)
 
 
 class BackendType(str, Enum):
@@ -82,29 +85,40 @@ class BenchmarkConfig:
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> BenchmarkConfig:
-        with open(path) as f:
-            raw = yaml.safe_load(f)
+        path = Path(path)
+        try:
+            raw = yaml.safe_load(path.read_text())
+        except FileNotFoundError:
+            raise FileNotFoundError(f"Config file not found: {path}")
+        except yaml.YAMLError as e:
+            raise ValueError(f"Invalid YAML in {path}: {e}") from e
 
-        backend_raw = raw.get("backend", {})
-        backend_raw["backend_type"] = BackendType(backend_raw.get("backend_type", "vllm"))
-        backend = BackendConfig(**backend_raw)
+        if not isinstance(raw, dict):
+            raise ValueError(f"Expected a YAML mapping in {path}, got {type(raw).__name__}")
 
-        traffic_raw = raw.get("traffic", {})
-        if "pattern" in traffic_raw:
-            traffic_raw["pattern"] = TrafficPattern(traffic_raw["pattern"])
-        traffic = TrafficConfig(**traffic_raw)
+        try:
+            backend_raw = raw.get("backend", {})
+            backend_raw["backend_type"] = BackendType(backend_raw.get("backend_type", "vllm"))
+            backend = BackendConfig(**backend_raw)
 
-        cost_raw = raw.get("cost", {})
-        cost = CostConfig(**cost_raw)
+            traffic_raw = raw.get("traffic", {})
+            if "pattern" in traffic_raw:
+                traffic_raw["pattern"] = TrafficPattern(traffic_raw["pattern"])
+            traffic = TrafficConfig(**traffic_raw)
 
-        return cls(
-            backend=backend,
-            traffic=traffic,
-            cost=cost,
-            warmup_requests=raw.get("warmup_requests", 10),
-            output_dir=Path(raw.get("output_dir", "results")),
-            run_name=raw.get("run_name", ""),
-        )
+            cost_raw = raw.get("cost", {})
+            cost = CostConfig(**cost_raw)
+
+            return cls(
+                backend=backend,
+                traffic=traffic,
+                cost=cost,
+                warmup_requests=raw.get("warmup_requests", 10),
+                output_dir=Path(raw.get("output_dir", "results")),
+                run_name=raw.get("run_name", ""),
+            )
+        except TypeError as e:
+            raise ValueError(f"Unexpected field in {path}: {e}") from e
 
     def to_yaml(self, path: str | Path) -> None:
         data = {
@@ -124,6 +138,11 @@ class BenchmarkConfig:
                 "concurrency": self.traffic.concurrency,
                 "max_tokens": self.traffic.max_tokens,
                 "prompt_lengths": self.traffic.prompt_lengths,
+                "ramp_up_seconds": self.traffic.ramp_up_seconds,
+                "burst_size": self.traffic.burst_size,
+                "burst_interval_seconds": self.traffic.burst_interval_seconds,
+                "cycle_period_seconds": self.traffic.cycle_period_seconds,
+                "spike_multiplier": self.traffic.spike_multiplier,
             },
             "cost": {
                 "cost_per_gpu_hour": self.cost.cost_per_gpu_hour,

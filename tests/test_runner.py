@@ -52,9 +52,10 @@ class TestBenchmarkResult:
         result = BenchmarkResult(
             backend="vllm", model="test", pattern="uniform",
             num_requests=100, concurrency=4,
+            wall_clock_seconds=25.0,
             results=[_make_result(1.0)] * 100,
         )
-        assert result.throughput_rps == pytest.approx(100.0)
+        assert result.throughput_rps == pytest.approx(4.0)
 
     def test_cost_per_million_tokens(self) -> None:
         result = BenchmarkResult(
