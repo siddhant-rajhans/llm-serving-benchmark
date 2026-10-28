@@ -1,0 +1,35 @@
+{
+  "traffic_patterns": {
+    "uniform": {
+      "count": 500,
+      "gen_time_ms": 43.9
+    },
+    "bursty": {
+      "count": 500,
+      "gen_time_ms": 44.8
+    },
+    "ramp_up": {
+      "count": 500,
+      "gen_time_ms": 45.8
+    },
+    "cyclic": {
+      "count": 500,
+      "gen_time_ms": 42.8
+    },
+    "spike": {
+      "count": 500,
+      "gen_time_ms": 39.9
+    }
+  },
+  "total_requests": 2500,
+  "routing": {
+    "routing_rate": 0.234,
+    "cost_savings_pct": 0.208,
+    "simple_to_8B": 585,
+    "complex_to_70B": 1915
+  },
+  "prefix_cache": {
+    "hit_rate": 0.145,
+    "prefix_tokens": 18
+  }
+}
